@@ -1,5 +1,5 @@
-var CACHE = 'bigosim-v1';
-var ASSETS = ['./', './index.html', './bg.png', './sheet.png', './chime.m4a',
+var CACHE = 'bigosim-v2';
+var ASSETS = ['./', './index.html', './bg.png', './get.png', './open.png',
               './manifest.webmanifest', './icon-180.png', './icon-512.png'];
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(ASSETS); })
