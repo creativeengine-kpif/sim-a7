@@ -28,7 +28,7 @@
            background:#fff; display:none; pointer-events:none; }
   /* Get sprite: the real pill crop (230x104 incl 4px AA margin) at 458,445 */
   #getspr { position:absolute; left:38.8465%; top:18.7053%; width:19.5081%; height:4.3716%;
-            pointer-events:none; transform-origin:50% 50%; }
+            pointer-events:none; }
   #getspr img { width:100%; height:100%; display:block; }
   #ov { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
   /* morph window: JS drives left/top/width/height in %; clips the Open sprite */
@@ -53,18 +53,23 @@
   <div id="getspr"><img src="get.png" alt=""></div>
   <svg id="ov" viewBox="0 0 1179 2379" preserveAspectRatio="none"
        xmlns="http://www.w3.org/2000/svg">
-    <!-- ring center (510, 496.5), centerline r 39, stroke 7 (V3 2.3pt @3x, measured on the
-         real 14 Pro install). Track #E6E4E6, arc #007DFF, bars per V3 (2.45x9.45pt, gap 1.55pt). -->
+    <!-- LOCKED METROLOGY (native screenshots IMG_6065-6077, P3->sRGB converted):
+         ring center (509.4, 497.75) canvas, centerline r 39.1, ALL strokes 6.1,
+         spinner/track gray rgb(228,228,229), gap 71deg (trim .803),
+         arc + bars blue #0088FE, bars 8.5x26.5 gap 3.5 rx 4.25. -->
+    <!-- collapse capsule: the pill (textless) collapsing INTO the ring circle -->
+    <rect id="cpill" x="462" y="449" width="222" height="96" rx="48"
+          fill="#007DFE" opacity="0" visibility="hidden"/>
     <g id="ringg" opacity="0">
-      <circle id="track" cx="510" cy="496.5" r="39" fill="none"
-              stroke="#E6E4E6" stroke-width="7" stroke-linecap="round"
-              stroke-dasharray="193.6 245.04" transform="rotate(-90 510 496.5)"/>
-      <circle id="arc" cx="510" cy="496.5" r="39" fill="none"
-              stroke="#007DFF" stroke-width="7" stroke-linecap="round"
-              stroke-dasharray="0 245.04" transform="rotate(-90 510 496.5)"/>
-      <g id="pausebars" opacity="0" fill="#007DFF">
-        <rect x="500.32" y="482.32" width="7.35" height="28.35" rx="3.675"/>
-        <rect x="512.32" y="482.32" width="7.35" height="28.35" rx="3.675"/>
+      <circle id="track" cx="509.4" cy="497.75" r="39.1" fill="none"
+              stroke="rgb(228,228,229)" stroke-width="6.1" stroke-linecap="butt"
+              stroke-dasharray="197.3 245.67" transform="rotate(-90 509.4 497.75)"/>
+      <circle id="arc" cx="509.4" cy="497.75" r="39.1" fill="none"
+              stroke="#0088FE" stroke-width="6.1" stroke-linecap="round"
+              stroke-dasharray="0 245.67" transform="rotate(-90 509.4 497.75)"/>
+      <g id="pausebars" opacity="0" fill="#0088FE">
+        <rect x="499.15" y="484.5" width="8.5" height="26.5" rx="4.25"/>
+        <rect x="511.15" y="484.5" width="8.5" height="26.5" rx="4.25"/>
       </g>
     </g>
   </svg>
@@ -78,20 +83,22 @@
 (function () {
   'use strict';
   var $ = function (id) { return document.getElementById(id); };
-  var patch = $('patch'), getspr = $('getspr'), ringg = $('ringg'), track = $('track'),
-      arc = $('arc'), bars = $('pausebars'), morph = $('morph'),
+  var patch = $('patch'), getspr = $('getspr'), cpill = $('cpill'), ringg = $('ringg'),
+      track = $('track'), arc = $('arc'), bars = $('pausebars'), morph = $('morph'),
       openfin = $('openfin'), tap = $('tap'), openA = $('open');
 
-  var CIRC = 245.04;                       // 2*pi*39
-  var CW = 1179, CH = 2379;                // canvas
-  var RCX = 510, RCY = 496.5;              // ring center
+  var CIRC = 245.67;                        // 2*pi*39.1
+  var CW = 1179, CH = 2379;                 // canvas
+  var RCX = 509.4, RCY = 497.75;            // ring center (measured)
   var PILL = { x: 462, y: 449, w: 222, h: 96 };
+  var RING_D = 84.3;                        // ring outer diameter (2*(39.1+3.05))
 
-  // ---- BigoSim V3 R30/R32 timeline, ported verbatim (seconds from tap) ----
-  var COLLAPSE = 0.18;
+  // ---- BigoSim V3 R30/R32 clock (ratified) + real-footage transition corrections ----
+  var COLLAPSE = 0.16;                      // measured: capsule -> ring circle, 160ms
+  var SPIN_IN_AT = 0.06, SPIN_IN_MS = 0.145; // spinner pure fade-in (no scale)
   var fillStart = 1.33, smoothEnd = 2.47, jumpEnd = 2.65,
       freezeEnd = 3.946, morphAt = 4.096, MORPH_S = 0.217;
-  var plateau = 0.756, sixty = 0.60, spinSpeed = 350.0;
+  var plateau = 0.756, sixty = 0.60, closeTo = 0.978, spinSpeed = 350.0;
   var spinEnd = fillStart - 0.30;
   var smoothPts = [[0.000, 0.000], [0.158, 0.100], [0.247, 0.169], [0.421, 0.267],
                    [0.553, 0.339], [0.684, 0.425], [0.816, 0.489], [0.947, 0.581],
@@ -115,8 +122,9 @@
       return sixty + e * (plateau - sixty);
     }
     if (el < freezeEnd) return plateau;
+    // final close: sweeps to ~98% (gap ~8deg) before the snap - measured on the real store
     var v = Math.min((el - freezeEnd) / (morphAt - freezeEnd), 1);
-    return plateau + v * (0.80 - plateau);
+    return plateau + v * (closeTo - plateau);
   }
   function pauseOpacity(el) {
     if (el < fillStart - 0.20) return 0;
@@ -126,17 +134,17 @@
     return 0;
   }
   function trackTrim(el) {
-    if (el < spinEnd) return 0.79;
-    if (el < fillStart) return 0.79 + ((el - spinEnd) / (fillStart - spinEnd)) * 0.21;
+    if (el < spinEnd) return 0.803;
+    if (el < fillStart) return 0.803 + ((el - spinEnd) / (fillStart - spinEnd)) * 0.197;
     return 1.0;
   }
   function trackRotation(el) { return Math.min(el, spinEnd) * spinSpeed; }
   function clamp01(x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
   function easeInOut(x) { return x < .5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2; }
 
-  // cubic-bezier(.19,.05,.26,.95) — V3's disc→pill stretch curve
+  // cubic-bezier(.19,.05,.26,.95) - V3's disc->pill stretch curve
   function bez(p1x, p1y, p2x, p2y) {
-    function sample(t, a, b) { // one coordinate of the curve
+    function sample(t, a, b) {
       var mt = 1 - t;
       return 3 * mt * mt * t * a + 3 * mt * t * t * b + t * t * t;
     }
@@ -144,7 +152,7 @@
       if (x <= 0) return 0;
       if (x >= 1) return 1;
       var t = x;
-      for (var i = 0; i < 6; i++) {                    // Newton
+      for (var i = 0; i < 6; i++) {
         var cx = sample(t, p1x, p2x) - x;
         var dx = 3 * (1 - t) * (1 - t) * p1x + 6 * (1 - t) * t * (p2x - p1x) +
                  3 * t * t * (1 - p2x);
@@ -164,8 +172,6 @@
     morph.style.height = (h / CH * 100) + '%';
     morph.style.borderRadius = '999px';
   }
-  // the sprite inside the morph window must render at the window's on-screen scale:
-  // width in CSS px of 230 canvas-px = 230/1179 of stage width
   function sizeMorphImg() {
     var sw = document.getElementById('stage').clientWidth;
     var img = morph.querySelector('img');
@@ -180,30 +186,36 @@
     t0 = performance.now();
     tap.style.display = 'none';
     patch.style.display = 'block';
+    getspr.style.display = 'none';          // text + real pill off on the first frame
+    cpill.setAttribute('visibility', 'visible');
     sizeMorphImg();
     requestAnimationFrame(tick);
   }
 
+  function lerp(a, b, u) { return a + (b - a) * u; }
+
   function tick(now) {
     var el = (now - t0) / 1000;
 
-    // 1. collapse (V3: pill exits scale .5 + fade; ring enters scale 1.6 + fade, 0.18s easeInOut)
+    // 1. collapse: the textless capsule shrinks INTO the ring circle while
+    //    lightening to white (opacity over the white patch), 160ms. Measured:
+    //    width-dominant (222 -> ~86) with height following (96 -> ~76).
     if (el < COLLAPSE) {
-      var u = easeInOut(el / COLLAPSE);
-      getspr.style.transform = 'scale(' + (1 - 0.5 * u) + ')';
-      getspr.style.opacity = 1 - u;
-      var s = 1.6 - 0.6 * u;
-      ringg.setAttribute('transform',
-        'translate(' + RCX + ' ' + RCY + ') scale(' + s + ') translate(' + (-RCX) + ' ' + (-RCY) + ')');
-      ringg.setAttribute('opacity', u);
+      var u = 1 - Math.pow(1 - el / COLLAPSE, 2);   // ease-out (measured width deltas decelerate)
+      var w = lerp(PILL.w, 86, u), h = lerp(PILL.h, 76, u);
+      cpill.setAttribute('x', lerp(PILL.x, RCX - 43, u));
+      cpill.setAttribute('y', lerp(PILL.y, RCY - 38, u));
+      cpill.setAttribute('width', w);
+      cpill.setAttribute('height', h);
+      cpill.setAttribute('rx', h / 2);
+      cpill.setAttribute('opacity', 1 - (el / COLLAPSE));
     } else {
-      getspr.style.opacity = 0;
-      ringg.removeAttribute('transform');
-      if (el < morphAt) ringg.setAttribute('opacity', 1);
+      cpill.setAttribute('opacity', 0);
     }
 
-    // 2. spinner track: gapped, rotating 350deg/s; gap closes 1.03->1.33
+    // 2. spinner: PURE opacity fade-in (no scale), starting 60ms in
     if (el < morphAt) {
+      ringg.setAttribute('opacity', clamp01((el - SPIN_IN_AT) / SPIN_IN_MS));
       var tr = trackTrim(el);
       track.setAttribute('stroke-dasharray', (tr * CIRC) + ' ' + CIRC);
       track.setAttribute('transform', 'rotate(' + (-90 + trackRotation(el)) + ' ' + RCX + ' ' + RCY + ')');
@@ -213,17 +225,17 @@
       bars.setAttribute('opacity', pauseOpacity(el));
     }
 
-    // 3. morphAt: one-frame snap ring -> solid disc, then disc stretches into Open (0.217s bezier)
+    // 3. morphAt: ONE-FRAME snap ring -> solid disc (ring-sized), then the disc
+    //    stretches into the Open pill over 217ms on V3's bezier. No disc-grow stage.
     if (el >= morphAt) {
       ringg.setAttribute('opacity', 0);
       var m = clamp01((el - morphAt) / MORPH_S);
       var e = morphEase(m);
-      var w = 84 + (PILL.w - 84) * e;
-      var h = 84 + (PILL.h - 84) * e;
-      var x = (RCX - 42) + (PILL.x - (RCX - 42)) * e;
-      var y = (RCY - 42) + (PILL.y - (RCY - 42)) * e;
       morph.style.display = 'block';
-      setMorphRect(x, y, w, h);
+      setMorphRect(lerp(RCX - RING_D / 2, PILL.x, e),
+                   lerp(RCY - RING_D / 2, PILL.y, e),
+                   lerp(RING_D, PILL.w, e),
+                   lerp(RING_D, PILL.h, e));
       if (m >= 1 && !done) {
         done = true;
         morph.style.display = 'none';
@@ -234,10 +246,9 @@
     if (!done) requestAnimationFrame(tick);
   }
 
-  // tap: subtle press dim on the real pill sprite (visible over the identical bg pixels)
+  // tap: subtle press dim on the real pill sprite
   tap.addEventListener('pointerdown', function (e) {
     e.preventDefault();
-    patch.style.display = 'block';
     getspr.style.opacity = 0.7;
   });
   tap.addEventListener('pointerup', function (e) {
