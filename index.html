@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="App Store">
+<meta name="theme-color" content="#ffffff">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="manifest" href="manifest.webmanifest">
+<title>App Store</title>
+<style>
+  html, body { margin:0; padding:0; height:100%; background:#fff; overflow:hidden;
+               overscroll-behavior:none; }
+  #stage { position:fixed; inset:0; background:#fff;
+           -webkit-user-select:none; user-select:none; -webkit-touch-callout:none;
+           touch-action:none; overflow:hidden; }
+  #bg { position:absolute; inset:0; width:100%; height:100%; display:block;
+        pointer-events:none; }
+  #dim { position:absolute; inset:0; background:#000; opacity:0; pointer-events:none; }
+  /* card: image-space left 18/1284, top 1756/2637, size 1248x863 */
+  #sheet { position:absolute; left:1.4019%; width:97.1963%;
+           top:66.5908%; height:32.7266%;
+           transform:translateY(36dvh); will-change:transform; pointer-events:none; }
+  #sheet img { width:100%; height:100%; display:block; }
+  /* Install-press flash, relative to card: x 454-795 / 1248, y 668-772 / 863 */
+  #flash { position:absolute; left:36.378%; top:77.404%; width:27.324%; height:12.05%;
+           border-radius:999px; background:#000; opacity:0; }
+  #ov { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+  #tap { position:absolute; left:34%; top:15.9%; width:21%; height:6.2%;
+         touch-action:manipulation; }
+  #open { position:absolute; left:34%; top:15.9%; width:21%; height:6.2%;
+          display:none; touch-action:manipulation; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <img id="bg" src="bg.png" alt="">
+  <svg id="ov" viewBox="0 0 1284 2637" preserveAspectRatio="none"
+       xmlns="http://www.w3.org/2000/svg">
+    <!-- GET pill: bbox 462-683 x 453-548, fill measured #007DFE -->
+    <g id="pillg">
+      <rect id="pill" x="462" y="453" width="222" height="96" rx="48" fill="#007DFE"/>
+      <text id="getlbl" x="573" y="521" text-anchor="middle" fill="#fff"
+            font-family="-apple-system,'SF Pro Text','Helvetica Neue',Arial,sans-serif"
+            font-size="56" font-weight="700">Get</text>
+    </g>
+    <!-- spinner: center 509.4/500.7 r 37.5 stroke 6.5 gray 227, gap 71deg -->
+    <circle id="spin" cx="509.4" cy="500.7" r="37.5" fill="none"
+            stroke="rgb(227,227,227)" stroke-width="6.5" stroke-linecap="round"
+            opacity="0" stroke-dasharray="189.1 46.5"/>
+    <!-- download ring -->
+    <g id="ringg" opacity="0">
+      <circle cx="509.4" cy="500.7" r="37.5" fill="none"
+              stroke="#E5E5E5" stroke-width="7"/>
+      <circle id="arc" cx="509.4" cy="500.7" r="37.5" fill="none"
+              stroke="#0881FA" stroke-width="7" stroke-linecap="round"
+              stroke-dasharray="0 235.62" transform="rotate(-90 509.4 500.7)"/>
+      <g id="pausebars" opacity="0" fill="#0A82F4">
+        <rect x="494.9" y="487.2" width="7.5" height="27" rx="3.75"/>
+        <rect x="516.4" y="487.2" width="7.5" height="27" rx="3.75"/>
+      </g>
+    </g>
+    <!-- OPEN morph disc/capsule -->
+    <g id="openg" opacity="0">
+      <rect id="orect" x="466.4" y="457.7" width="86" height="86" rx="43" fill="#007DFE"/>
+      <text id="openlbl" x="573" y="521" text-anchor="middle" fill="#fff" opacity="0"
+            font-family="-apple-system,'SF Pro Text','Helvetica Neue',Arial,sans-serif"
+            font-size="56" font-weight="700">Open</text>
+    </g>
+  </svg>
+  <div id="sheet"><img src="sheet.png" alt=""><div id="flash"></div></div>
+  <div id="tap"></div>
+  <a id="open" href="https://slink.bigovideo.tv/live" rel="noopener"></a>
+</div>
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var pill = $('pill'), getlbl = $('getlbl'), spin = $('spin'), ringg = $('ringg'),
+      arc = $('arc'), bars = $('pausebars'), openg = $('openg'), orect = $('orect'),
+      openlbl = $('openlbl'), dim = $('dim'), sheet = $('sheet'), flash = $('flash'),
+      tap = $('tap'), openA = $('open');
+  // dim sits between bg and sheet in DOM order… insert it now (kept out of markup flow above)
+  var dimEl = document.createElement('div'); dimEl.id = 'dim';
+  document.getElementById('stage').insertBefore(dimEl, sheet);
+  dim = dimEl;
+
+  var CIRC = 2 * Math.PI * 37.5;                 // 235.62
+  var DIM_A = 0.565;                             // measured off the recording
+  var SHEET_OFF = 881 / 2637 * 100;              // dvh offset when fully down
+  sheet.style.transform = 'translateY(' + (SHEET_OFF + 4) + 'dvh)';
+
+  // ---- timeline constants (ms from press; the ratified install LUT) ----
+  var T_COLLAPSE = 217, T_DIM = 717, DIM_MS = 267, T_SHEET = 934, SHEET_MS = 617,
+      T_FLASH = 1730, T_CHIME = 1855, T_DISMISS = 2917, DISMISS_MS = 60,
+      T_FILL = 4817, FILL_MS = 983, T_FULL = 5834, T_MORPH = 5900, MORPH_MS = 233;
+  // fill LUT: climb to 33.9%, ~67ms stall, snap to 56%, close to 100%
+  var FILL_LUT = [[0,0],[100,.08],[200,.17],[300,.26],[420,.339],[487,.339],
+                  [500,.56],[650,.72],[800,.87],[920,.97],[983,1]];
+  function lut(pts, t) {
+    if (t <= pts[0][0]) return pts[0][1];
+    for (var i = 1; i < pts.length; i++) {
+      if (t <= pts[i][0]) {
+        var a = pts[i - 1], b = pts[i];
+        return a[1] + (b[1] - a[1]) * (t - a[0]) / (b[0] - a[0]);
+      }
+    }
+    return pts[pts.length - 1][1];
+  }
+  function clamp01(x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
+  function easeInOut(x) { return x < .5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2; }
+  // sheet spring: response 0.63, damping 0.71 (overshoot ≈4%)
+  function spring(t) { // t seconds
+    var w0 = 2 * Math.PI / 0.63, z = 0.71, wd = w0 * Math.sqrt(1 - z * z), d = z * w0;
+    return 1 - Math.exp(-d * t) * (Math.cos(wd * t) + (d / wd) * Math.sin(wd * t));
+  }
+
+  // ---- audio: decode chime up front, schedule at the LUT moment ----
+  var ctx = null, chimeBuf = null;
+  fetch('chime.m4a').then(function (r) { return r.arrayBuffer(); })
+    .then(function (ab) {
+      ctx = new (window.AudioContext || window.webkitAudioContext)();
+      return ctx.decodeAudioData(ab);
+    }).then(function (b) { chimeBuf = b; }).catch(function () {});
+
+  var t0 = null, chimed = false, done = false;
+  function start() {
+    if (t0 !== null) return;
+    t0 = performance.now();
+    tap.style.display = 'none';
+    if (ctx) {
+      ctx.resume();
+      if (chimeBuf) {
+        var src = ctx.createBufferSource();
+        src.buffer = chimeBuf; src.connect(ctx.destination);
+        src.start(ctx.currentTime + T_CHIME / 1000);
+        chimed = true;
+      }
+    }
+    requestAnimationFrame(tick);
+  }
+
+  function tick(now) {
+    var t = now - t0;
+    // 1. pill collapse (anchored at its left end; label drops first frame)
+    if (t < T_COLLAPSE) {
+      getlbl.setAttribute('opacity', t < 17 ? 1 : 0);
+      var w = 222 - (222 - 96) * easeInOut(t / T_COLLAPSE);
+      pill.setAttribute('width', w);
+    } else {
+      getlbl.setAttribute('opacity', 0);
+      pill.setAttribute('opacity', t < T_COLLAPSE + 80 ? 1 - (t - T_COLLAPSE) / 80 : 0);
+    }
+    // 2. spinner: cross-fades in at collapse end, spins 360deg/s
+    if (t > 120 && t < T_FILL) {
+      spin.setAttribute('opacity', clamp01((t - 120) / 97));
+      spin.setAttribute('stroke-dashoffset', -(t / 1000) * CIRC);
+    } else if (t >= T_FILL) { spin.setAttribute('opacity', 0); }
+    // 3. dim in / out
+    if (t >= T_DIM && t < T_DISMISS) {
+      dim.style.opacity = DIM_A * easeInOut(clamp01((t - T_DIM) / DIM_MS));
+    } else if (t >= T_DISMISS) {
+      dim.style.opacity = DIM_A * (1 - easeInOut(clamp01((t - T_DISMISS) / DIM_MS)));
+    }
+    // 4. sheet up (spring) / fast drop (measured 60ms)
+    if (t >= T_SHEET && t < T_DISMISS) {
+      var p = spring(Math.min(t - T_SHEET, SHEET_MS + 400) / 1000);
+      sheet.style.transform = 'translateY(' + ((1 - p) * SHEET_OFF) + 'dvh)';
+    } else if (t >= T_DISMISS) {
+      var q = clamp01((t - T_DISMISS) / DISMISS_MS);
+      sheet.style.transform = 'translateY(' + (q * q * (SHEET_OFF + 4)) + 'dvh)';
+    }
+    // 5. Install pressed flash
+    if (t >= T_FLASH && t < T_CHIME + 40) {
+      var f = t < T_FLASH + 60 ? (t - T_FLASH) / 60 : 1 - clamp01((t - T_FLASH - 60) / 105);
+      flash.style.opacity = 0.12 * clamp01(f);
+    } else { flash.style.opacity = 0; }
+    // 6. download ring per fill LUT; pause bars fade in 350-567ms into fill
+    if (t >= T_FILL && t < T_MORPH) {
+      ringg.setAttribute('opacity', 1);
+      var pr = lut(FILL_LUT, Math.min(t - T_FILL, FILL_MS));
+      arc.setAttribute('stroke-dasharray', (pr * CIRC) + ' ' + CIRC);
+      bars.setAttribute('opacity', clamp01((t - T_FILL - 350) / 217));
+      if (t >= T_FULL) bars.setAttribute('opacity', 1 - clamp01((t - T_FULL) / 66));
+    }
+    // 7. OPEN morph: hollow ring -> disc -> capsule, label at the end
+    if (t >= T_MORPH) {
+      ringg.setAttribute('opacity', 0);
+      openg.setAttribute('opacity', 1);
+      var m = clamp01((t - T_MORPH) / MORPH_MS);
+      if (m < 0.39) {                      // disc grows over the ring
+        var s = 0.55 + 0.45 * (m / 0.39);
+        var d2 = 86 * s;
+        orect.setAttribute('x', 509.4 - d2 / 2); orect.setAttribute('y', 500.7 - d2 / 2);
+        orect.setAttribute('width', d2); orect.setAttribute('height', d2);
+        orect.setAttribute('rx', d2 / 2);
+      } else {                             // disc -> capsule at the Get bbox
+        var e = easeInOut((m - 0.39) / 0.61);
+        orect.setAttribute('x', (509.4 - 43) * (1 - e) + 462 * e);
+        orect.setAttribute('y', (500.7 - 43) * (1 - e) + 453 * e);
+        orect.setAttribute('width', (86) * (1 - e) + 222 * e);
+        orect.setAttribute('height', (86) * (1 - e) + 96 * e);
+        orect.setAttribute('rx', 43 * (1 - e) + 48 * e);
+      }
+      openlbl.setAttribute('opacity', clamp01((m - 0.7) / 0.3));
+      if (m >= 1 && !done) { done = true; openA.style.display = 'block'; }
+    }
+    if (!done) requestAnimationFrame(tick); else requestAnimationFrame(idleTick);
+  }
+  function idleTick() { /* frozen end-state; nothing animates */ }
+
+  // GET press: dim on touch, fire on release (like the real control)
+  tap.addEventListener('pointerdown', function (e) {
+    e.preventDefault(); pill.setAttribute('fill', '#0568D0');
+  });
+  tap.addEventListener('pointerup', function (e) {
+    e.preventDefault(); pill.setAttribute('fill', '#007DFE'); start();
+  });
+
+  // freeze the world: no scroll, no pinch, no double-tap zoom, no long-press
+  ['touchmove', 'gesturestart', 'gesturechange'].forEach(function (ev) {
+    document.addEventListener(ev, function (e) { e.preventDefault(); }, { passive: false });
+  });
+  document.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+  document.addEventListener('touchend', function (e) {
+    if (e.target !== openA && e.target !== tap) e.preventDefault();
+  }, { passive: false });
+
+  // debug hook: lets a test harness step the timeline deterministically
+  window.__dbg = { start: start, tick: tick, setT0: function (v) { t0 = v; },
+                   getT0: function () { return t0; } };
+
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+})();
+</script>
+</body>
+</html>
