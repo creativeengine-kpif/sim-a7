@@ -12,8 +12,9 @@
 <link rel="manifest" href="manifest.webmanifest">
 <title>App Store</title>
 <style>
-  /* canvas = IMG_6059 minus the 162px status bar: 1179 x 2394.
-     Every overlay is placed in % of that canvas so page and overlays scale together. */
+  /* canvas = IMG_6059 minus the true 14 Pro status bar (59pt = 177px): 1179 x 2379,
+     1:1 with the device. Every overlay is placed in % of that canvas. */
+  * { -webkit-tap-highlight-color: rgba(0,0,0,0); }
   html, body { margin:0; padding:0; height:100%; background:#fff; overflow:hidden;
                overscroll-behavior:none; }
   #stage { position:fixed; inset:0; background:#fff;
@@ -21,11 +22,12 @@
            touch-action:none; overflow:hidden; }
   #bg { position:absolute; inset:0; width:100%; height:100%; display:block;
         pointer-events:none; }
-  /* white patch under the animating sprites, covering the baked Get pill (458-688 x 460-564) */
-  #patch { position:absolute; left:38.8465%; top:19.2147%; width:19.5081%; height:4.3442%;
+  /* white patch: covers the baked Get pill AND the In-App Purchases label
+     (x 454-834, y 441-548 canvas) from the moment of the tap, forever */
+  #patch { position:absolute; left:38.5072%; top:18.5372%; width:32.2307%; height:4.4977%;
            background:#fff; display:none; pointer-events:none; }
-  /* Get sprite: the real pill crop (230x104 incl 4px AA margin) at 458,460 */
-  #getspr { position:absolute; left:38.8465%; top:19.2147%; width:19.5081%; height:4.3442%;
+  /* Get sprite: the real pill crop (230x104 incl 4px AA margin) at 458,445 */
+  #getspr { position:absolute; left:38.8465%; top:18.7053%; width:19.5081%; height:4.3716%;
             pointer-events:none; transform-origin:50% 50%; }
   #getspr img { width:100%; height:100%; display:block; }
   #ov { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
@@ -34,13 +36,14 @@
   #morph img { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
                width:230px; height:104px; }
   /* final Open sprite, unclipped real pixels */
-  #openfin { position:absolute; left:38.8465%; top:19.2147%; width:19.5081%; height:4.3442%;
+  #openfin { position:absolute; left:38.8465%; top:18.7053%; width:19.5081%; height:4.3716%;
              display:none; pointer-events:none; }
   #openfin img { width:100%; height:100%; display:block; }
-  #tap { position:absolute; left:37%; top:18.2%; width:23%; height:6.4%;
+  #tap { position:absolute; left:37%; top:17.6%; width:23%; height:6.6%;
          touch-action:manipulation; }
-  #open { position:absolute; left:37%; top:18.2%; width:23%; height:6.4%;
-          display:none; touch-action:manipulation; }
+  #open { position:absolute; left:37%; top:17.6%; width:23%; height:6.6%;
+          display:none; touch-action:manipulation; outline:none;
+          -webkit-tap-highlight-color: rgba(0,0,0,0); }
 </style>
 </head>
 <body>
@@ -48,27 +51,28 @@
   <img id="bg" src="bg.png" alt="">
   <div id="patch"></div>
   <div id="getspr"><img src="get.png" alt=""></div>
-  <svg id="ov" viewBox="0 0 1179 2394" preserveAspectRatio="none"
+  <svg id="ov" viewBox="0 0 1179 2379" preserveAspectRatio="none"
        xmlns="http://www.w3.org/2000/svg">
-    <!-- ring center (510, 511.5), centerline r 39, stroke 7 (V3 2.3pt @3x, measured on the
+    <!-- ring center (510, 496.5), centerline r 39, stroke 7 (V3 2.3pt @3x, measured on the
          real 14 Pro install). Track #E6E4E6, arc #007DFF, bars per V3 (2.45x9.45pt, gap 1.55pt). -->
     <g id="ringg" opacity="0">
-      <circle id="track" cx="510" cy="511.5" r="39" fill="none"
+      <circle id="track" cx="510" cy="496.5" r="39" fill="none"
               stroke="#E6E4E6" stroke-width="7" stroke-linecap="round"
-              stroke-dasharray="193.6 245.04" transform="rotate(-90 510 511.5)"/>
-      <circle id="arc" cx="510" cy="511.5" r="39" fill="none"
+              stroke-dasharray="193.6 245.04" transform="rotate(-90 510 496.5)"/>
+      <circle id="arc" cx="510" cy="496.5" r="39" fill="none"
               stroke="#007DFF" stroke-width="7" stroke-linecap="round"
-              stroke-dasharray="0 245.04" transform="rotate(-90 510 511.5)"/>
+              stroke-dasharray="0 245.04" transform="rotate(-90 510 496.5)"/>
       <g id="pausebars" opacity="0" fill="#007DFF">
-        <rect x="500.32" y="497.32" width="7.35" height="28.35" rx="3.675"/>
-        <rect x="512.32" y="497.32" width="7.35" height="28.35" rx="3.675"/>
+        <rect x="500.32" y="482.32" width="7.35" height="28.35" rx="3.675"/>
+        <rect x="512.32" y="482.32" width="7.35" height="28.35" rx="3.675"/>
       </g>
     </g>
   </svg>
   <div id="morph"><img src="open.png" alt=""></div>
   <div id="openfin"><img src="open.png" alt=""></div>
   <div id="tap"></div>
-  <a id="open" href="bigolive://main" rel="noopener"></a>
+  <a id="open" href="bigolive://livevideoshow?visitor=1" rel="noopener"></a>
+  <div id="diag" style="position:absolute;left:0;top:0;width:14%;height:7%;touch-action:manipulation;"></div>
 </div>
 <script>
 (function () {
@@ -79,9 +83,9 @@
       openfin = $('openfin'), tap = $('tap'), openA = $('open');
 
   var CIRC = 245.04;                       // 2*pi*39
-  var CW = 1179, CH = 2394;                // canvas
-  var RCX = 510, RCY = 511.5;              // ring center
-  var PILL = { x: 462, y: 464, w: 222, h: 96 };
+  var CW = 1179, CH = 2379;                // canvas
+  var RCX = 510, RCY = 496.5;              // ring center
+  var PILL = { x: 462, y: 449, w: 222, h: 96 };
 
   // ---- BigoSim V3 R30/R32 timeline, ported verbatim (seconds from tap) ----
   var COLLAPSE = 0.18;
@@ -250,6 +254,15 @@
   document.addEventListener('touchend', function (e) {
     if (e.target !== openA && e.target !== tap) e.preventDefault();
   }, { passive: false });
+
+  // hidden door to the link-test page: triple-tap the top-left corner within 1.2s
+  var diagTaps = [];
+  document.getElementById('diag').addEventListener('pointerup', function () {
+    var now = performance.now();
+    diagTaps = diagTaps.filter(function (t) { return now - t < 1200; });
+    diagTaps.push(now);
+    if (diagTaps.length >= 3) location.href = 't.html';
+  });
 
   window.__dbg = { start: start, tick: tick, setT0: function (v) { t0 = v; },
                    getT0: function () { return t0; } };
