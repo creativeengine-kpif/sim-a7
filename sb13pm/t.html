@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Link test</title>
+<style>
+  body { font-family: -apple-system, sans-serif; margin: 24px; background: #fff; }
+  h2 { font-size: 18px; }
+  a.t { display: block; margin: 14px 0; padding: 16px; background: #007DFE; color: #fff;
+        border-radius: 12px; text-decoration: none; font-weight: 600; }
+  a.back { display: block; margin-top: 30px; color: #555; }
+  p { color: #444; font-size: 14px; }
+</style>
+</head>
+<body>
+<h2>ShopBack link test - tap each, note what happens</h2>
+<p>For each button: instant app, prompt, error alert, or web page?</p>
+<a class="t" href="shopback://">1 - deep link (bare scheme)</a>
+<a class="t" href="shopback://home">2 - deep link (home route)</a>
+<a class="t" href="https://app.shopback.com">3 - universal link (same tab)</a>
+<a class="t" href="https://www.shopback.com" target="_blank" rel="noopener">4 - web fallback (new context)</a>
+<a class="back" href="index.html">&larr; back to the page</a>
+</body>
+</html>
