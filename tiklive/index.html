@@ -23,7 +23,12 @@
   /* boxes.json: top y160-260 x20-1284 | tools y1715-1885 x330-960
      banner y1925-2120 x80-1210 | golive y2135-2340 x80-1210
      camrow y2395-2490 x0-1284 | strip y2520-2778 x0-1284 */
-  #top    { left:1.558%;  top:5.759%;  width:98.442%; }
+  #top    { left:0;       top:5.040%;  width:100%; }
+  /* Check LIVE access pill fill - same material as the practice banner,
+     solved from the two-background pair: rgba(53,53,53,0.376). The sprite
+     carries only TikTok's white glyphs on top. */
+  #pillbg { position:absolute; left:57.243%; top:5.508%; width:38.941%; height:4.283%;
+            background:rgba(53,53,53,0.376); border-radius:999px; pointer-events:none; }
   #tools  { left:25.701%; top:61.735%; width:49.065%; }
   #banner { left:6.231%;  top:69.295%; width:88.006%; }
   #golive { left:6.231%;  top:76.854%; width:88.006%; }
@@ -42,6 +47,7 @@
   <video id="cam" autoplay playsinline muted></video>
   <button id="golivebtn" aria-label="Go LIVE"></button>
   <img class="spr" id="golive" src="golive.png" alt="">
+  <div id="pillbg"></div>
   <img class="spr" id="top" src="top.png" alt="">
   <img class="spr" id="tools" src="tools.png" alt="">
   <img class="spr" id="banner" src="banner.png" alt="">
