@@ -1,0 +1,74 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>LIVE</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<style>
+  /* Stage = the 1284x2778 (@3x) screenshot coordinate system, scaled to fill
+     the viewport width. Same 19.5:9 family as every modern iPhone, so the
+     stage fills edge to edge. All sprite geometry comes from boxes.json
+     measurements - px/1284 as percentages, baked in below. */
+  html, body { margin:0; padding:0; background:#000; height:100%; overflow:hidden;
+               -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
+  #stage { position:fixed; top:0; left:0; width:100vw; height:100dvh; }
+  /* camera fills everything above the opaque bottom strip (y2520/2778 = 90.71%) */
+  #cam { position:absolute; top:0; left:0; width:100%; height:90.71%;
+         object-fit:cover; transform:scaleX(-1); background:#000; }
+  .spr { position:absolute; pointer-events:none; }
+  /* boxes.json: top y160-260 x20-1284 | tools y1715-1885 x330-960
+     banner y1925-2120 x80-1210 | golive y2135-2340 x80-1210
+     camrow y2395-2490 x0-1284 | strip y2520-2778 x0-1284 */
+  #top    { left:1.558%;  top:5.759%;  width:98.442%; }
+  #tools  { left:25.701%; top:61.735%; width:49.065%; }
+  #banner { left:6.231%;  top:69.295%; width:88.006%; }
+  #golive { left:6.231%;  top:76.854%; width:88.006%; }
+  #camrow { left:0;       top:86.213%; width:100%; }
+  #strip  { left:0;       top:90.712%; width:100%; }
+  /* the one functional element: an invisible hotspot exactly over Go LIVE */
+  #golivebtn { position:absolute; left:6.231%; top:76.854%; width:88.006%; height:5.4%;
+               background:transparent; border:0; outline:0; -webkit-tap-highlight-color:transparent; }
+  #golivebtn:active + #golive { opacity:.82; }
+  #tapx { position:absolute; left:1.5%; top:5.7%; width:14%; height:4.2%;
+          background:transparent; border:0; outline:0; -webkit-tap-highlight-color:transparent; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <video id="cam" autoplay playsinline muted></video>
+  <button id="golivebtn" aria-label="Go LIVE"></button>
+  <img class="spr" id="golive" src="golive.png" alt="">
+  <img class="spr" id="top" src="top.png" alt="">
+  <img class="spr" id="tools" src="tools.png" alt="">
+  <img class="spr" id="banner" src="banner.png" alt="">
+  <img class="spr" id="camrow" src="camrow.png" alt="">
+  <img class="spr" id="strip" src="strip.png" alt="">
+  <button id="tapx" aria-label="close"></button>
+</div>
+<script>
+(function(){
+  var v = document.getElementById('cam');
+  function start(){
+    navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user', width: {ideal: 1920}, height: {ideal: 1080} },
+      audio: false
+    }).then(function(s){ v.srcObject = s; })
+      .catch(function(e){ document.title = 'cam: ' + e.name; });
+  }
+  start();
+  // iOS suspends the stream when the PWA backgrounds; restart on return
+  document.addEventListener('visibilitychange', function(){
+    if (!document.hidden && (!v.srcObject || !v.srcObject.active)) start();
+  });
+  // STAGE 2 hook: Go LIVE behavior lands here
+  document.getElementById('golivebtn').addEventListener('click', function(){
+    /* stage two */
+  });
+})();
+</script>
+</body>
+</html>
