@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="App Store">
+<meta name="theme-color" content="#ffffff">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="manifest" href="manifest.webmanifest">
+<title>App Store</title>
+<style>
+  /* canvas = IMG_1118 minus the 13 Pro Max status bar (47pt = 141px): 1284 x 2637,
+     1:1 with the device. Every overlay is placed in % of that canvas. */
+  * { -webkit-tap-highlight-color: rgba(0,0,0,0); }
+  html, body { margin:0; padding:0; height:100%; background:#fff; overflow:hidden;
+               overscroll-behavior:none; }
+  #stage { position:fixed; inset:0; background:#fff;
+           -webkit-user-select:none; user-select:none; -webkit-touch-callout:none;
+           touch-action:none; overflow:hidden; }
+  #bg { position:absolute; inset:0; width:100%; height:100%; display:block;
+        pointer-events:none; }
+  /* white patch: covers the baked Get pill AND the In-App Purchases label
+     (x 454-834, y 441-548 canvas) from the moment of the tap, forever */
+  #patch { position:absolute; left:35.0467%; top:16.7235%; width:29.9844%; height:4.5127%;
+           background:#fff; display:none; pointer-events:none; }
+  /* Get sprite: the real pill crop (230x104 incl 4px AA margin) at 458,445 */
+  #getspr { position:absolute; left:35.6698%; top:17.0269%; width:17.9128%; height:3.9439%;
+            pointer-events:none; }
+  #getspr img { width:100%; height:100%; display:block; }
+  #ov { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+  /* morph window: JS drives left/top/width/height in %; clips the Open sprite */
+  #morph { position:absolute; overflow:hidden; display:none; pointer-events:none; }
+  #morph img { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+               width:230px; height:104px; }
+  /* final Open sprite, unclipped real pixels */
+  #openfin { position:absolute; left:35.6698%; top:17.0269%; width:17.9128%; height:3.9439%;
+             display:none; pointer-events:none; }
+  #openfin img { width:100%; height:100%; display:block; }
+  #tap { position:absolute; left:33.6449%; top:16.0410%; width:24.2991%; height:6.5984%;
+         touch-action:manipulation; }
+  #open { position:absolute; left:33.6449%; top:16.0410%; width:24.2991%; height:6.5984%;
+          display:none; touch-action:manipulation; outline:none;
+          -webkit-tap-highlight-color: rgba(0,0,0,0); }
+</style>
+</head>
+<body>
+<div id="stage">
+  <img id="bg" src="bg.png" alt="">
+  <div id="patch"></div>
+  <div id="getspr"><img src="get.png" alt=""></div>
+  <svg id="ov" viewBox="0 0 1284 2637" preserveAspectRatio="none"
+       xmlns="http://www.w3.org/2000/svg">
+    <!-- LOCKED METROLOGY (native screenshots IMG_6065-6077, P3->sRGB converted):
+         ring center (509.4, 497.75) canvas, centerline r 39.1, ALL strokes 6.1,
+         spinner/track gray rgb(228,228,229), gap 71deg (trim .803),
+         arc + bars blue #0088FE, bars 8.5x26.5 gap 3.5 rx 4.25. -->
+    <!-- collapse capsule: the pill (textless) collapsing INTO the ring circle -->
+    <rect id="cpill" x="462" y="453" width="222" height="96" rx="48"
+          fill="#007DFE" opacity="0" visibility="hidden"/>
+    <g id="ringg" opacity="0">
+      <circle id="track" cx="509.4" cy="501.75" r="39.1" fill="none"
+              stroke="rgb(228,228,229)" stroke-width="6.1" stroke-linecap="butt"
+              stroke-dasharray="197.3 245.67" transform="rotate(-90 509.4 501.75)"/>
+      <circle id="arc" cx="509.4" cy="501.75" r="39.1" fill="none"
+              stroke="#0088FE" stroke-width="6.1" stroke-linecap="round"
+              stroke-dasharray="0 245.67" transform="rotate(-90 509.4 501.75)"/>
+      <g id="pausebars" opacity="0" fill="#0088FE">
+        <rect x="499.15" y="488.5" width="8.5" height="26.5" rx="4.25"/>
+        <rect x="511.15" y="488.5" width="8.5" height="26.5" rx="4.25"/>
+      </g>
+    </g>
+  </svg>
+  <div id="morph"><img src="open.png" alt=""></div>
+  <div id="openfin"><img src="open.png" alt=""></div>
+  <div id="tap"></div>
+  <a id="open" href="bigolive://livevideoshow?visitor=1" rel="noopener"></a>
+  <div id="diag" style="position:absolute;left:0;top:0;width:14%;height:7%;touch-action:manipulation;"></div>
+</div>
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var patch = $('patch'), getspr = $('getspr'), cpill = $('cpill'), ringg = $('ringg'),
+      track = $('track'), arc = $('arc'), bars = $('pausebars'), morph = $('morph'),
+      openfin = $('openfin'), tap = $('tap'), openA = $('open');
+
+  var CIRC = 245.67;                        // 2*pi*39.1
+  var CW = 1284, CH = 2637;                 // canvas
+  var RCX = 509.4, RCY = 501.75;            // ring center (measured)
+  var PILL = { x: 462, y: 453, w: 222, h: 96 };
+  var RING_D = 84.3;                        // ring outer diameter (2*(39.1+3.05))
+
+  // ---- BigoSim V3 R30/R32 clock (ratified) + real-footage transition corrections ----
+  var COLLAPSE = 0.16;                      // measured: capsule -> ring circle, 160ms
+  var SPIN_IN_AT = 0.06, SPIN_IN_MS = 0.145; // spinner pure fade-in (no scale)
+  // FAST VARIANT (owner order 08-25): pre-fill phase untouched; the blue
+  // fill + stall + close compressed to the fastest realistic read for the
+  // "talking to someone in seconds" ad ending. Master 13pm keeps the
+  // ratified V3 clock.
+  var fillStart = 1.33, smoothEnd = 1.75, jumpEnd = 1.83,
+      freezeEnd = 1.98, morphAt = 2.10, MORPH_S = 0.217;
+  var plateau = 0.756, sixty = 0.60, closeTo = 0.978, spinSpeed = 350.0;
+  var spinEnd = fillStart - 0.30;
+  var smoothPts = [[0.000, 0.000], [0.158, 0.100], [0.247, 0.169], [0.421, 0.267],
+                   [0.553, 0.339], [0.684, 0.425], [0.816, 0.489], [0.947, 0.581],
+                   [1.000, 0.600]];
+
+  function smoothProgress(u) {
+    for (var i = 1; i < smoothPts.length; i++) {
+      if (u <= smoothPts[i][0]) {
+        var a = smoothPts[i - 1], b = smoothPts[i];
+        return a[1] + (b[1] - a[1]) * (u - a[0]) / (b[0] - a[0]);
+      }
+    }
+    return sixty;
+  }
+  function progress(el) {
+    if (el <= fillStart) return 0;
+    if (el < smoothEnd) return smoothProgress((el - fillStart) / (smoothEnd - fillStart));
+    if (el < jumpEnd) {
+      var u = (el - smoothEnd) / (jumpEnd - smoothEnd);
+      var e = 1 - Math.pow(1 - u, 2);
+      return sixty + e * (plateau - sixty);
+    }
+    if (el < freezeEnd) return plateau;
+    // final close: sweeps to ~98% (gap ~8deg) before the snap - measured on the real store
+    var v = Math.min((el - freezeEnd) / (morphAt - freezeEnd), 1);
+    return plateau + v * (closeTo - plateau);
+  }
+  function pauseOpacity(el) {
+    if (el < fillStart - 0.20) return 0;
+    if (el < fillStart) return (el - (fillStart - 0.20)) / 0.20;
+    if (el < smoothEnd) return 1;
+    if (el < smoothEnd + 0.10) return 1 - (el - smoothEnd) / 0.10;
+    return 0;
+  }
+  function trackTrim(el) {
+    if (el < spinEnd) return 0.803;
+    if (el < fillStart) return 0.803 + ((el - spinEnd) / (fillStart - spinEnd)) * 0.197;
+    return 1.0;
+  }
+  function trackRotation(el) { return Math.min(el, spinEnd) * spinSpeed; }
+  function clamp01(x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
+  function easeInOut(x) { return x < .5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2; }
+
+  // cubic-bezier(.19,.05,.26,.95) - V3's disc->pill stretch curve
+  function bez(p1x, p1y, p2x, p2y) {
+    function sample(t, a, b) {
+      var mt = 1 - t;
+      return 3 * mt * mt * t * a + 3 * mt * t * t * b + t * t * t;
+    }
+    return function (x) {
+      if (x <= 0) return 0;
+      if (x >= 1) return 1;
+      var t = x;
+      for (var i = 0; i < 6; i++) {
+        var cx = sample(t, p1x, p2x) - x;
+        var dx = 3 * (1 - t) * (1 - t) * p1x + 6 * (1 - t) * t * (p2x - p1x) +
+                 3 * t * t * (1 - p2x);
+        if (Math.abs(dx) < 1e-6) break;
+        t -= cx / dx;
+        t = t < 0 ? 0 : t > 1 ? 1 : t;
+      }
+      return sample(t, p1y, p2y);
+    };
+  }
+  var morphEase = bez(0.19, 0.05, 0.26, 0.95);
+
+  function setMorphRect(x, y, w, h) {
+    morph.style.left = (x / CW * 100) + '%';
+    morph.style.top = (y / CH * 100) + '%';
+    morph.style.width = (w / CW * 100) + '%';
+    morph.style.height = (h / CH * 100) + '%';
+    morph.style.borderRadius = '999px';
+  }
+  function sizeMorphImg() {
+    var sw = document.getElementById('stage').clientWidth;
+    var img = morph.querySelector('img');
+    img.style.width = (230 / CW * sw) + 'px';
+    img.style.height = 'auto';
+  }
+  window.addEventListener('resize', sizeMorphImg);
+
+  var t0 = null, done = false;
+  function start() {
+    if (t0 !== null) return;
+    t0 = performance.now();
+    tap.style.display = 'none';
+    patch.style.display = 'block';
+    getspr.style.display = 'none';          // text + real pill off on the first frame
+    cpill.setAttribute('visibility', 'visible');
+    sizeMorphImg();
+    requestAnimationFrame(tick);
+  }
+
+  function lerp(a, b, u) { return a + (b - a) * u; }
+
+  function tick(now) {
+    var el = (now - t0) / 1000;
+
+    // 1. collapse: the textless capsule shrinks INTO the ring circle while
+    //    lightening to white (opacity over the white patch), 160ms. Measured:
+    //    width-dominant (222 -> ~86) with height following (96 -> ~76).
+    if (el < COLLAPSE) {
+      var u = 1 - Math.pow(1 - el / COLLAPSE, 2);   // ease-out (measured width deltas decelerate)
+      var w = lerp(PILL.w, 86, u), h = lerp(PILL.h, 76, u);
+      cpill.setAttribute('x', lerp(PILL.x, RCX - 43, u));
+      cpill.setAttribute('y', lerp(PILL.y, RCY - 38, u));
+      cpill.setAttribute('width', w);
+      cpill.setAttribute('height', h);
+      cpill.setAttribute('rx', h / 2);
+      cpill.setAttribute('opacity', 1 - (el / COLLAPSE));
+    } else {
+      cpill.setAttribute('opacity', 0);
+    }
+
+    // 2. spinner: PURE opacity fade-in (no scale), starting 60ms in
+    if (el < morphAt) {
+      ringg.setAttribute('opacity', clamp01((el - SPIN_IN_AT) / SPIN_IN_MS));
+      var tr = trackTrim(el);
+      track.setAttribute('stroke-dasharray', (tr * CIRC) + ' ' + CIRC);
+      track.setAttribute('transform', 'rotate(' + (-90 + trackRotation(el)) + ' ' + RCX + ' ' + RCY + ')');
+      var pr = progress(el);
+      arc.setAttribute('visibility', pr > 0 ? 'visible' : 'hidden');
+      arc.setAttribute('stroke-dasharray', (pr * CIRC) + ' ' + CIRC);
+      bars.setAttribute('opacity', pauseOpacity(el));
+    }
+
+    // 3. morphAt: ONE-FRAME snap ring -> solid disc (ring-sized), then the disc
+    //    stretches into the Open pill over 217ms on V3's bezier. No disc-grow stage.
+    if (el >= morphAt) {
+      ringg.setAttribute('opacity', 0);
+      var m = clamp01((el - morphAt) / MORPH_S);
+      var e = morphEase(m);
+      morph.style.display = 'block';
+      setMorphRect(lerp(RCX - RING_D / 2, PILL.x, e),
+                   lerp(RCY - RING_D / 2, PILL.y, e),
+                   lerp(RING_D, PILL.w, e),
+                   lerp(RING_D, PILL.h, e));
+      if (m >= 1 && !done) {
+        done = true;
+        morph.style.display = 'none';
+        openfin.style.display = 'block';
+        openA.style.display = 'block';
+      }
+    }
+    if (!done) requestAnimationFrame(tick);
+  }
+
+  // tap: subtle press dim on the real pill sprite
+  tap.addEventListener('pointerdown', function (e) {
+    e.preventDefault();
+    getspr.style.opacity = 0.7;
+  });
+  tap.addEventListener('pointerup', function (e) {
+    e.preventDefault();
+    getspr.style.opacity = 1;
+    start();
+  });
+
+  // freeze the world
+  ['touchmove', 'gesturestart', 'gesturechange'].forEach(function (ev) {
+    document.addEventListener(ev, function (e) { e.preventDefault(); }, { passive: false });
+  });
+  document.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+  document.addEventListener('touchend', function (e) {
+    if (e.target !== openA && e.target !== tap) e.preventDefault();
+  }, { passive: false });
+
+  // hidden door to the link-test page: triple-tap the top-left corner within 1.2s
+  var diagTaps = [];
+  document.getElementById('diag').addEventListener('pointerup', function () {
+    var now = performance.now();
+    diagTaps = diagTaps.filter(function (t) { return now - t < 1200; });
+    diagTaps.push(now);
+    if (diagTaps.length >= 3) location.href = 't.html';
+  });
+
+  window.__dbg = { start: start, tick: tick, setT0: function (v) { t0 = v; },
+                   getT0: function () { return t0; } };
+
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+})();
+</script>
+</body>
+</html>
