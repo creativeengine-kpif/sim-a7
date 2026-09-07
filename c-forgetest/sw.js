@@ -1,4 +1,4 @@
-var CACHE = 'bigosim-dry-1788791055';
+var CACHE = 'bigosim-c-forgetest-1788791159';
 var ASSETS = ['./', './index.html', './bg.png', './get.png', './open.png', './t.html',
               './manifest.webmanifest', './icon-180.png', './icon-512.png'];
 self.addEventListener('install', function (e) {
